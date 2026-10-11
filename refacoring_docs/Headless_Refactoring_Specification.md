@@ -1,6 +1,6 @@
 # Chat On Steroids — Ubuntu Server Headless Refactoring 기능명세서
 
-> 문서 버전: **1.0.0 — 아키텍처 조사 및 실행 계획 (설계안, 구현 전)**  
+> 문서 버전: **1.0.1 — 플러그인 범위 조정 (설계안, 구현 전)**  
 > 작성일: 2026-10-11  
 > Upstream: [totec448-spec/chat-on-steroids](https://github.com/totec448-spec/chat-on-steroids)  
 > 작업 대상: [ELSAPHABA/chat-on-steroids-headless](https://github.com/ELSAPHABA/chat-on-steroids-headless) / 브랜치 `feat/headless-refactoring`  
@@ -17,7 +17,7 @@
 1. **필수 범위 (MVP)**: Ubuntu Server에서 독립 실행되는 Core MCP 서버, 권한 제한된 파일/터미널/패치 작업, Plugins MCP proxy, 외부 MCP 플러그인 설치·연결·호출, Playwright MCP headless, CLI 설정, 보안·비밀정보 저장, systemd 서비스, 로그와 복구.
 2. **별도 설계 승인 필요**: 기존 ChatGPT 브라우저 대화에서 동작하던 Worker 생성, 세션 관찰, Goal/Loop, Compact & Resume, 대화 기록의 자동 연동, 메시지 전송/완료 판단. 이 기능은 브라우저 확장 프로그램·브라우저 브리지·ChatGPT 웹 페이지의 상태 신호에 구조적으로 결합돼 있으므로 단순 포팅으로 유지할 수 없다.
 
-**중요한 제품 경계:** Chrome/Edge/Brave용 **CoS companion 확장 프로그램**과 `src/main/browser-control.ts` 의 **ChatGPT/기존 탭 브라우저 컨트롤**은 리팩터링 대상에서 **제외**한다. 반대로 플러그인 카탈로그의 **`@playwright/mcp`는 반드시 포함**한다. Playwright MCP가 **자체 headless Chromium/Chrome 프로세스**를 실행하는 것은 허용된다. 이것은 CoS companion을 다시 구현하는 것이 아니다.
+**중요한 제품 경계:** Chrome/Edge/Brave용 **CoS companion 확장 프로그램**과 `src/main/browser-control.ts` 의 **ChatGPT/기존 탭 브라우저 컨트롤**은 리팩터링 대상에서 **제외**한다. 반대로 플러그인 카탈로그의 **`@playwright/mcp`는 반드시 포함**한다. Playwright MCP가 **자체 headless Chromium/Chrome 프로세스**를 실행하는 것은 허용된다. 이것은 CoS companion을 다시 구현하는 것이 아니다. **Blender MCP와 Unity MCP는 Headless 리팩터링 지원 범위에서 제외한다.**
 
 **ChatGPT Plus/Pro UI를 확장 프로그램 없이 자동으로 조작하거나 그 구독을 API 호출처럼 사용하는 경로는 제공하지 않는다.** 외부 ChatGPT 클라이언트가 MCP를 직접 호출하는 경우와, 별도 모델 API를 이용해 자율 에이전트를 구현하는 경우는 서로 다른 제품 방식이다. 후자는 모델 제공자 API 사용 권한·비용·정책을 별도로 요구한다.
 
@@ -37,8 +37,9 @@
 | Core MCP 파일 읽기·쓰기·검색·패치 | **포함** | 승인된 루트 및 capability 기반 정책 유지 |
 | `exec_command`/`write_stdin` 및 백그라운드 프로세스 | **포함** | 서비스 계정·프로세스 회수·세션 소유권 재정의 |
 | MCP HTTP 서버, Core/Plugins surface | **포함** | headless bootstrap, 접근 제어 및 배포 경로 |
-| 외부 MCP 플러그인: npm / Python / command / MCPB / remote | **포함** | Ubuntu 적합성은 플러그인별 검증 |
+| 외부 MCP 플러그인: npm / Python / command / MCPB / remote | **포함** | 범용 설치/연결 프레임워크 유지, 기본 지원 카탈로그 5종만 검증 |
 | **Playwright MCP (외부 플러그인)** | **필수 포함** | 자체 브라우저 사용, `--headless`, 설치 의존성 및 독립 테스트 |
+| **Blender MCP / Unity MCP** | **제외** | Headless 기본 카탈로그에서 숨김/미포함; 전용 설치·실행·테스트·문서화·호환성 보장 대상 아님 |
 | Skills, 프로젝트 워크스페이스, Git, 진단 로그 | **포함** | GUI·대화 ID 의존 부분은 분리 |
 | OAuth 플러그인 연동 | **포함** | 서버에는 자동 브라우저 실행 없음; CLI URL 출력·원격 콜백 설계 |
 | 터널(현재 OpenAI Secure Tunnel / cloudflared) | **선택적 유지** | 지원되는 방식·인증·운영 적합성 재검증 |
@@ -62,7 +63,7 @@
 - `src/main/mcp/surfaces.ts`: `core`, `desktop`, `plugins` 3개 surface. Linux에서는 `src/main/platform.ts`가 native desktop automation 미지원으로 선언한다. Headless에서는 **desktop surface 자체를 등록하지 않는다**.
 - `src/main/plugins/manager.ts`: `PluginManager`는 외부 MCP subprocess/HTTP transport, 도구 발견, enabled 정책, 결과 전달, 설치 상태의 중심이다. 기본 OAuth URL opener가 동적으로 `import('electron')` 해 `shell.openExternal` 을 호출하므로 반드시 주입식 CLI/OAuth provider로 교체한다.
 - `src/main/plugins/installer.ts`: npm·Python/uv·MCPB·원격·사용자 명령형 소스 지원, 프로세스·설치 격리 로직 존재. `src/main/plugins/uv-runtime.ts`에 **linux-x64/linux-arm64** 자산이 존재하여 재사용 근거가 있다.
-- `src/main/plugins/catalog.ts`: **`playwright`** 항목이 **`@playwright/mcp@0.0.80`** 으로 정의되어 있다(분석 기준 리비전). 원본 카탈로그 지침은 GUI Chrome을 전제로 하므로 Ubuntu Server 설치법과 `--headless` 옵션을 별도로 제공해야 한다.
+- `src/main/plugins/catalog.ts`: **`playwright`** 항목이 **`@playwright/mcp@0.0.80`** 으로 정의되어 있다(분석 기준 리비전). 원본 카탈로그에는 7종이 존재하나 **Headless에서는 Blender/Unity를 제외한 5종만 기본 지원**한다. 원본 Playwright 지침은 GUI Chrome을 전제로 하므로 Ubuntu Server 설치법과 `--headless` 옵션을 별도로 제공해야 한다.
 - `src/main/plugins/oauth.ts`: OAuth 리다이렉트가 임시 `127.0.0.1` 포트를 사용한다. 브라우저가 다른 컴퓨터에 있는 서버 환경에서는 콜백 전달 설계 없이는 로그인 완료가 어렵다.
 - `src/main/secrets.ts`: Electron `safeStorage`에 전적으로 의존하며 Linux `basic_text` fallback을 거부한다. **가장 먼저 교체해야 할 Electron 종속성** 중 하나이다.
 - `src/main/durable.ts` · `src/main/session/store.ts`: `userData` 경로를 주입받는 파일 기반 저장 엔진이라 원칙적으로 재사용 가능하지만 session store는 ChatGPT 웹 메시지 ID를 가정하는 부분을 재검토해야 한다.
@@ -82,6 +83,7 @@
 | `src/main/config.ts`, `src/shared/types.ts` | 수정 | GUI 설정과 서버 설정 분리, Zod 검증, safe default |
 | `src/main/secrets.ts` | 교체 | Electron-free Linux credential provider, 마이그레이션 명시 |
 | `src/main/plugins/{manager,installer,oauth,uv-runtime}.ts` | 재사용/수정 | Electron opener 제거, headless OAuth 및 lifecycle, Playwright 옵션 |
+| `src/main/plugins/catalog.ts` | Headless용 필터 적용 | Blender·Unity 제외, Memory·Playwright·Fetch·HeyGen·Recraft 5종만 기본 제공; 원본 데스크톱 카탈로그에는 영향 없음 |
 | `src/main/connection.ts`, `tunnel/*` | 어댑터화 | 로컬 MCP와 원격 접근 분리, 터널은 opt-in |
 | `src/main/{durable,logger,env,sandbox,fsops,rawfs,search}.ts` | 우선 재사용 | 경로/권한/배포 방식만 감사 |
 | `src/main/codex/*` | 우선 재사용 | 리눅스 PTY/취소/종료/출력 한도/소유권 검증 |
@@ -190,6 +192,18 @@ src/headless/
 
 ### 4.2 플러그인 분류별 적합성
 
+**Headless 기본 지원 플러그인: 5종 (기존 7종에서 Blender·Unity 제외)**
+
+| 기본 플러그인 | 소스 | Headless 대응 |
+| --- | --- | --- |
+| Knowledge Memory | npm · `@modelcontextprotocol/server-memory@2026.8.31` | 그대로 포함, 데이터 영속성 검증 |
+| Playwright Browser | npm · `@playwright/mcp@0.0.80` | 반드시 포함; 자체 Chromium/Chrome `--headless` |
+| Web Fetch | Python · `mcp-server-fetch@2026.8.18` | 포함; Python/uv 환경 구성 |
+| HeyGen Video | Remote MCP · OAuth | 포함; 서버용 OAuth 승인 절차 수정 |
+| Recraft Design | Remote MCP · OAuth | 포함; 서버용 OAuth 승인 절차 수정 |
+
+Blender MCP(`blender-mcp`)와 Unity MCP(`mcpforunityserver`)는 **명시적 제외**다. Headless용 기본 카탈로그, 기본 설치 레시피, 서버 배포 이미지, 호환성 테스트 및 공식 지원 목록에 넣지 않는다. 기존 범용 사용자 지정 MCP 설치 기능 자체는 유지하므로 사용자 제공 임의 MCP 실행 파일을 일괄 금지할 필요는 없지만, 이를 Blender·Unity 지원/이식으로 간주하거나 검증 대상으로 삼지 않는다.
+
 | 종류 | 계획 | 추가 제약 |
 | --- | --- | --- |
 | npm(Memory, Playwright 등) | 유지 | pinned version, Node/npm PATH, 별도 작업 디렉터리, 의존성 설치 |
@@ -198,7 +212,7 @@ src/headless/
 | MCPB | 유지 | 아카이브·manifest 정책 유지, Linux 지원 manifest만 허용 |
 | remote HTTP | 유지 | HTTPS/TLS·서버 검증·토큰 보호·요청 타임아웃 |
 | remote OAuth | 유지 + 수정 | 서버 자체 GUI 없음; 별도 관리자 브라우저와 localhost callback 경로 필요 |
-| Blender, Unity 및 GUI 애플리케이션 연동 | 플러그인 관리자 기능은 유지 | **서버 자체에서 GUI 앱 구동 가능성을 보장하지 않음.** 별도 호스트/원격 도구 및 그래픽 런타임 필요 시 개별 호환성 문서 제공 |
+| Blender MCP / Unity MCP | **리팩터링 범위 제외** | Headless 전용 플러그인 카탈로그에서 미제공; 설치·기동·테스트·유지보수 보장 없음 |
 
 **보안:** 기존 `docs/plugins.md`에 명시된 대로 외부 플러그인 프로세스는 CoS 승인 폴더 sandbox를 자동 상속하지 않는다. Playwright를 포함한 플러그인을 별도 Unix 사용자/컨테이너 등으로 격리하는 방안을 평가해야 한다. CoS `readOnly`가 외부 플러그인을 전체 거부하는 현재 정책을 유지한다.
 
@@ -265,7 +279,7 @@ systemd unit 작성 시: `User`/`Group`, `WorkingDirectory`, `ExecStart`, `Resta
 | **0 — Baseline** | P0 | 원본 SHA 고정, npm 의존성/테스트·네이티브 모듈 조사, import dependency graph, MCP 공개 계약·플러그인 스냅샷 캡처 | 빌드/테스트 baseline, 지원/제외 표 확정; 라이선스 검토 |
 | **1 — Headless skeleton** | P0 | Electron-free `main/bootstrap`, CLI `serve/doctor`, XDG 데이터 경로, SIGTERM 및 잠금, node 전용 빌드 | `DISPLAY` 없이 부팅/종료, Electron import 0, 로그 생성 |
 | **2 — Core extraction** | P0 | MCP Server/Kernel/Tools의 브라우저 귀속 분리, Core-only 계약, 권한 승인·운영 context, Linux PTY | file/patch/exec/read-only/root deny 실사용 테스트 |
-| **3 — Plugins incl. Playwright** | P0 | PluginManager Electron opener 분리, CLI 설치/상태 관리, npm/Python/stdio/remote, Playwright preset + headless deps | Plugins tools/list/call, Playwright navigation·snapshot·스크린샷, 하위 프로세스 회수 |
+| **3 — Plugins incl. Playwright** | P0 | PluginManager Electron opener 분리, CLI 설치/상태 관리, npm/Python/stdio/remote, Headless 카탈로그 5종 선별(Blender·Unity 제외), Playwright preset + headless deps | 5종 카탈로그 확인, Plugins tools/list/call, Playwright navigation·snapshot·스크린샷, 하위 프로세스 회수 |
 | **4 — Credentials, OAuth & transports** | P0/P1 | SecretStore 대체, 원격 관리자 OAuth flow, local-only MCP, optional tunnel, 인증·TLS 정책 | unattended 재부팅 후 동작, 자격 증명 보호, 인증 실패 검증 |
 | **5 — Packaging & operations** | P1 | systemd unit, 서버 build package, Ubuntu amd64 CI, health/readiness, 롤백/마이그레이션 | fresh Ubuntu VM 설치 및 reboot, 복구·정지 시퀀스 |
 | **6 — Compatibility review** | P1 | Core/Plugins 도구 parity, 미지원 기능 오류, 원본과 주요 회귀 비교, docs/README | 인수 기준 충족, 목록화된 제한사항 사용자에게 명시 |
@@ -284,7 +298,7 @@ systemd unit 작성 시: `User`/`Group`, `WorkingDirectory`, `ExecStart`, `Resta
 | HR-T-003 | `exec_command` 긴 명령, PTY, stdin 입력, SIGTERM | 적절한 출력·세션 정리·중복 실행 방지 |
 | HR-T-004 | 승인 root 내부/외부/심볼릭 링크/상대 경로 | 우회 없이 허용·거절 |
 | HR-T-005 | Core에서 Plugins/desktop tool 호출 | 반드시 unknown/unsupported; 다른 surface 호출로 우회 불가 |
-| HR-T-006 | npm Memory, Python Fetch, custom command, remote MCP | 설치·연결·호출·재시작 복원 |
+| HR-T-006 | npm Memory, Python Fetch, custom command, remote MCP | 설치·연결·호출·재시작 복원; Headless 카탈로그는 Memory·Playwright·Fetch·HeyGen·Recraft 5종만 제공 |
 | HR-T-007 | **Playwright MCP headless** navigate/snapshot/click/screenshot | 자체 브라우저만 실행, 결과 반환, `DISPLAY` 불필요 |
 | HR-T-008 | Playwright 종료·플러그인 disable·daemon shutdown | 자식 프로세스 정리, 반복 실행 메모리 누수 없음 |
 | HR-T-009 | SecretStore 초기화/저장/재부팅/오류/키 미제공 | 평문 누출 없음, 안전한 실패·복구 경로 |
@@ -293,6 +307,7 @@ systemd unit 작성 시: `User`/`Group`, `WorkingDirectory`, `ExecStart`, `Resta
 | HR-T-012 | systemd restart 및 reboot, state 파일 손상, 취소·종료 중 요청 | 결정적인 준비/종료 상태, 데이터 손상 최소화 |
 | HR-T-013 | `npm run typecheck`, 분리된 unit/integration/CI 테스트 | headless 및 기존 앱 회귀 결과 분리 |
 | HR-T-014 | import graph/패키징 산출물에서 `electron`, `extension`, `bridge`, `browser-control` 검사 | 금지 모듈 0 (개발용 소스가 저장소에 남는 것과 배포 포함은 구분) |
+| HR-T-015 | Headless 카탈로그/배포/CLI에서 Blender·Unity 조회 및 선택 시도 | 기본 카탈로그에 두 플러그인 노출 없음; 별도 전용 런타임 또는 의존성 포함 없음 |
 
 ### 9.2 비기능 테스트
 
@@ -322,6 +337,7 @@ systemd unit 작성 시: `User`/`Group`, `WorkingDirectory`, `ExecStart`, `Resta
 - ADR-001: Electron app 수정보다 **Node.js headless 프로세스 새 엔트리포인트** 선택.
 - ADR-002: MVP는 **Core + Plugins**만 제공, Desktop/companion/CoS Browser 제외.
 - ADR-003: Playwright는 **외부 MCP 서버로 유지**하고 자체 브라우저만 headless 실행.
+- ADR-007: **Blender/Unity는 Headless 지원 대상에서 제외**한다. Headless 기본 플러그인 카탈로그는 Memory, Playwright, Fetch, HeyGen, Recraft의 5종으로 한정한다.
 - ADR-004: 원본 UI 기반 멀티에이전트/자동 대화 기능은 포팅 완료로 간주하지 않음.
 - ADR-005: 기본은 localhost 연결 + 최소 권한. 외부 노출은 별도 검증 후 opt-in.
 - ADR-006: 기존 Electron `secrets.bin` 자동 복호화/복사를 가정하지 않음.
@@ -348,3 +364,4 @@ systemd unit 작성 시: `User`/`Group`, `WorkingDirectory`, `ExecStart`, `Resta
 | --- | --- | --- |
 | 2026-10-11 | 0.1.0-draft | 초기 범용 리팩터링 명세서 |
 | 2026-10-11 | **1.0.0** | upstream 코드 기반 Ubuntu Server Headless 적합성·아키텍처·기능/제외 경계·Playwright 플러그인·Phase 0~7·테스트 기준 확정 초안 |
+| 2026-10-11 | **1.0.1** | Blender/Unity 지원 제외, Headless 기본 플러그인 5종 명시 및 Phase 3·검증 기준 갱신 |
