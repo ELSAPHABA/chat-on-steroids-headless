@@ -5,7 +5,7 @@
 > **기준 Upstream:** `totec448-spec/chat-on-steroids` @ `1d23ecdb8ab4dd5864f7f835778f539c51128526`  
 > **작업 대상:** `ELSAPHABA/chat-on-steroids-headless` / `feat/headless-refactoring`  
 > **원본 버전:** `package.json` 2.1.34  
-> **설계 기준:** [Headless_Refactoring_Specification.md](Headless_Refactoring_Specification.md) v1.1.0  
+> **설계 기준:** [Headless_Refactoring_Specification.md](Headless_Refactoring_Specification.md) v1.2.0  
 > **범위:** Chromium companion/ChatGPT 브라우저 제어 제외, 외부 Playwright MCP 유지, Blender/Unity 기본 지원 제외
 
 ## 1. Phase 0 체크리스트 및 검증 수준
@@ -14,14 +14,14 @@
 | --- | --- | --- | --- |
 | P0-01 | 원본 SHA 및 작업 브랜치 기준선 고정 | 상기 source SHA, branch 비교 | **완료** |
 | P0-02 | npm·런타임·네이티브 의존성 인벤토리 | `package.json` / `package-lock.json` / 빌드 명령 분석 | **정적 조사 완료** |
-| P0-03 | 소스 트리 구성과 모듈 관계 | `src/main` 177개 TS 등 인벤토리 + 14개 중요 모듈의 직접 import 그래프 | **핵심 경로 완료 / 전수 그래프 미완료** |
+| P0-03 | 소스 트리 구성과 모듈 관계 | 중요 모듈 14개 직접 관계 + [RPi3 실측 전수 lexical import 검사](Phase0_RPi3_Test_Report.md): `src` 299개 파일/1,175개 내부 edge | **정적 상대경로 검증 완료 / AST·CI 차단 게이트 미완료** |
 | P0-04 | 공개 MCP surface 및 도구 목록 | `src/main/mcp/{server,tools,surfaces}.ts`, `tools-plugins.ts` | **정적 스냅샷 완료** |
 | P0-05 | 기본 플러그인 및 외부 소스 유형 | `plugins/{catalog,manager,installer,exposure,oauth}.ts` | **완료** |
-| P0-06 | CI/테스트 기준선 | 동일 SHA의 upstream GitHub Actions 성공 실행 확인 | **외부 실행 증빙 확보 / fork 자체 실행 미실시** |
+| P0-06 | CI/테스트 기준선 | 동일 SHA의 upstream CI 성공; RPi3 Venv 계약 검사 **18/18 통과**; npm 설치 **미완료** | **정적 검사 완료 / fork TypeScript·Vitest 미실시** |
 | P0-07 | 라이선스·보안 이관 위험 | `SECURITY.md`, `docs/plugins.md`, `docs/licenses/*`, `package.json` 및 관련 코드 조사 | **위험 목록 완료 / 제품별 준수 재검증 필요** |
 | P0-08 | 서버 전용 배포/실행 가능성 실증 | 신규 Node entrypoint 없는 상태 | **불가: Phase 1 이후 검증** |
 
-**결론:** 재사용 가능한 Core/Plugins 구현은 확인되었지만 현 상태는 standalone headless 프로그램이 아니다. **Phase 1 코드를 작성하기 전 반드시 `P0-03` 전수 의존성 확인과 테스트 실행 환경을 마련해야 한다.** 본 보고서가 성공적으로 실행된 headless 빌드나 완전한 통합 테스트를 의미하지 않는다.
+**결론:** 재사용 가능한 Core/Plugins 구현은 확인되었지만 현 상태는 standalone headless 프로그램이 아니다. **RPi3 환경에서 전체 `src` 299개 TypeScript 파일의 lexical import 경로를 검사해 미해결 경로 0개를 확인**했으나, **정식 TypeScript AST/CI 금지 import 검사 및 fork npm/타입/Vitest 테스트는 아직 완료하지 못했다.** Phase 1 코드 변경은 이러한 차단 게이트를 고려해야 한다. 자세한 실측 결과는 [Phase0_RPi3_Test_Report.md](Phase0_RPi3_Test_Report.md)에 기록했다.
 
 ## 2. Source baseline
 
@@ -256,8 +256,9 @@ env -u DISPLAY node dist/headless/main.js doctor
 5. UI 기반 agents/Goal/Compact & Resume의 기존 약속은 Headless MVP에 포함하지 않는다.
 
 **미해결(Phase 1에 앞서 진행하거나 Phase 1의 첫 PR에서 차단 게이트로 처리):**
-- [ ] **P0-G1** 전체 177 `src/main` 및 55 `src/shared` TypeScript 파일의 정적 import 그래프/비정적 import까지 조사해 headless 경로의 전이 의존성 보고서를 생성할 것(이 문서는 **핵심 14개**만 직접 그래프 확인).
-- [ ] **P0-G2** 동일 fork branch에서 실제 clean `npm ci` / `npm run typecheck` / `npm run verify:ci` 를 **재실행**할 수 있는 Linux 개발/CI 환경 확보. 지금 확인된 성공 증거는 **upstream** 실행 기록이다.
+- [x] **P0-G1a — lexical 전수 조사:** DevSpace RPi3의 HongDevVenv Python으로 전체 `src` TypeScript 299개(이 중 `main` 177, `shared` 55)를 스캔하여 내부 상대경로 edge 1,175개, 경로 미해결 0개 확인([실측 보고서](Phase0_RPi3_Test_Report.md)).
+- [ ] **P0-G1b — 완전한 CI 게이트:** TypeScript AST/type-only·비정적 import·runtime 번들 의존성 확인 및 신규 Headless entrypoint에서 Electron/브라우저 모듈 전이 도달 0개를 검증하는 자동 게이트 구축.
+- [ ] **P0-G2 — 여전히 차단:** RPi3 Ubuntu 24.04.5 ARM64에서 `npm ci` 실행했지만 호출 시간 제한, 오프라인 재시도 `ENOTCACHED` 및 Node 24.14.0 일부 패키지 엔진 경고로 설치 미완료. 따라서 `npm run typecheck` / `npm run verify:ci` **미실시**. 원본 CI(Node 22, Ubuntu x64)와 RPi3가 다르며 재현 증빙은 현재 **upstream** 실행 기록만 있음([실측 보고서](Phase0_RPi3_Test_Report.md)).
 - [ ] **P0-G3** Phase 1 CI에서 Node-only entrypoint의 import graph 검증과 Electron/bridge module 배제 자동 게이트를 추가할 것.
 - [ ] **P0-G4** 기존 secret 저장 포맷의 서버 변환 여부 정책을 확정; 기본값은 자동 import 금지·재등록.
 - [ ] **P0-G5** 원본 `mcp/surfaces.ts` 의 등록 가능 이름과 실제 permission별 `tools/list` fixture 비교; 동적 플러그인 도구는 mock/live 분리.
