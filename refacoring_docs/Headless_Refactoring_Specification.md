@@ -1,6 +1,6 @@
 # Chat On Steroids — Ubuntu Server Headless Refactoring 기능명세서
 
-> 문서 버전: **1.0.1 — 플러그인 범위 조정 (설계안, 구현 전)**  
+> 문서 버전: **1.1.0 — Phase 0 조사 결과 반영 (설계안, 구현 전)**  
 > 작성일: 2026-10-11  
 > Upstream: [totec448-spec/chat-on-steroids](https://github.com/totec448-spec/chat-on-steroids)  
 > 작업 대상: [ELSAPHABA/chat-on-steroids-headless](https://github.com/ELSAPHABA/chat-on-steroids-headless) / 브랜치 `feat/headless-refactoring`  
@@ -26,7 +26,7 @@
 ### 1.1 대상과 배포
 
 - 목표 OS: Ubuntu Server **24.04 LTS x86_64 우선**, Ubuntu 22.04/26.04 및 Linux arm64는 검증 매트릭스에서 별도 확인. 커널·glibc·네이티브 모듈 호환 여부 확인 전까지 모든 조합의 지원을 선언하지 않는다.
-- 목표 런타임: Node.js 24 LTS 계열을 우선 평가하고 실제 패키지 및 MCP SDK 호환 범위를 잠근다. npm, TypeScript, Python/uv 및 선택적 Chromium은 기능별 의존성으로 분리한다.
+- 목표 런타임: **Node.js 22 기준선 우선(원본 CI에서 검증됨)**. Node.js 24는 실제 패키지 및 MCP SDK의 추가 CI 호환 검증이 완료된 후 지원 여부를 결정한다. npm, TypeScript, Python/uv 및 선택적 Chromium은 기능별 의존성으로 분리한다.
 - 동작 형태: **로그인 세션, 디스플레이 서버, Electron GUI, 트레이, Chromium companion extension 없이** SSH/systemd에서 상시 실행.
 - 기존 원본 `main` 은 수정하지 않고 작업 브랜치에 단계별 작은 커밋을 쌓는다. 이번 요청은 **계획/명세서 작성**이며 런타임 소스 수정은 수행하지 않는다.
 
@@ -274,9 +274,18 @@ systemd unit 작성 시: `User`/`Group`, `WorkingDirectory`, `ExecStart`, `Resta
 
 ## 8. 단계별 실행 계획
 
+### 8.1 Phase 0 실행 결과 (2026-10-11)
+
+- **Phase 0 기준선·소스 조사 진행 결과:** [Phase0_Baseline_Report.md](Phase0_Baseline_Report.md) — 원본 SHA, 구성요소, 핵심 14개 모듈의 정적 import 관계, MCP 공개 도구 계약, 플러그인 5종, Linux 네이티브 의존성 및 upstream CI 결과를 기록.
+- **원본 CI:** Ubuntu 24.04 x64를 포함한 upstream Node 22 CI 및 Linux x64 Canary 패키징 모두 성공. 이는 **기존 Electron 빌드의 증빙**이며 아직 Headless 빌드 성공은 아님.
+- **남은 게이트:** 전체 177개 main + 55개 shared TypeScript import의 전수 그래프, fork에서 clean 빌드·테스트 재현, permission별 실제 MCP tool snapshot. 이를 완료하거나 Phase 1 첫 PR의 차단 게이트로 명시하고 통과하기 전에는 Headless 실행 가능 판정 불가.
+- **결과 상태:** Phase 0 정적 기준선 **부분 완료**. 완전한 서버 실행 검증은 미실시. 브라우저/Electron 코어 의존성 분리 작업은 **Phase 1~2의 구현 대상**.
+
+### 8.2 Phase 실행 목록
+
 | Phase | 우선순위 | 작업 및 변경 | 검증 / 완료 조건 |
 | --- | --- | --- | --- |
-| **0 — Baseline** | P0 | 원본 SHA 고정, npm 의존성/테스트·네이티브 모듈 조사, import dependency graph, MCP 공개 계약·플러그인 스냅샷 캡처 | 빌드/테스트 baseline, 지원/제외 표 확정; 라이선스 검토 |
+| **0 — Baseline (진행: 정적 조사 및 upstream CI 확보)** | P0 | 원본 SHA/의존성 조사, 주요 14개 모듈 import 관계, Core/Plugins 계약·플러그인 스냅샷 [보고서](Phase0_Baseline_Report.md) 작성 | 완료: upstream 기준선; 미완: 177+55 전체 의존성, fork 자체 clean test, 도구 스냅샷 fixture |
 | **1 — Headless skeleton** | P0 | Electron-free `main/bootstrap`, CLI `serve/doctor`, XDG 데이터 경로, SIGTERM 및 잠금, node 전용 빌드 | `DISPLAY` 없이 부팅/종료, Electron import 0, 로그 생성 |
 | **2 — Core extraction** | P0 | MCP Server/Kernel/Tools의 브라우저 귀속 분리, Core-only 계약, 권한 승인·운영 context, Linux PTY | file/patch/exec/read-only/root deny 실사용 테스트 |
 | **3 — Plugins incl. Playwright** | P0 | PluginManager Electron opener 분리, CLI 설치/상태 관리, npm/Python/stdio/remote, Headless 카탈로그 5종 선별(Blender·Unity 제외), Playwright preset + headless deps | 5종 카탈로그 확인, Plugins tools/list/call, Playwright navigation·snapshot·스크린샷, 하위 프로세스 회수 |
@@ -365,3 +374,4 @@ systemd unit 작성 시: `User`/`Group`, `WorkingDirectory`, `ExecStart`, `Resta
 | 2026-10-11 | 0.1.0-draft | 초기 범용 리팩터링 명세서 |
 | 2026-10-11 | **1.0.0** | upstream 코드 기반 Ubuntu Server Headless 적합성·아키텍처·기능/제외 경계·Playwright 플러그인·Phase 0~7·테스트 기준 확정 초안 |
 | 2026-10-11 | **1.0.1** | Blender/Unity 지원 제외, Headless 기본 플러그인 5종 명시 및 Phase 3·검증 기준 갱신 |
+| 2026-10-11 | **1.1.0** | Phase 0 소스·CI 조사 보고서 연결, 기준 Node.js 22 수정, 해결 전 게이트 및 진행 상태 반영 |
