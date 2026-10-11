@@ -1,6 +1,6 @@
 # Chat On Steroids — Ubuntu Server Headless Refactoring 기능명세서
 
-> 문서 버전: **1.1.0 — Phase 0 조사 결과 반영 (설계안, 구현 전)**  
+> 문서 버전: **1.2.0 — RPi3 Venv Phase 0 정적 테스트 결과 반영 (설계안, 구현 전)**  
 > 작성일: 2026-10-11  
 > Upstream: [totec448-spec/chat-on-steroids](https://github.com/totec448-spec/chat-on-steroids)  
 > 작업 대상: [ELSAPHABA/chat-on-steroids-headless](https://github.com/ELSAPHABA/chat-on-steroids-headless) / 브랜치 `feat/headless-refactoring`  
@@ -274,18 +274,19 @@ systemd unit 작성 시: `User`/`Group`, `WorkingDirectory`, `ExecStart`, `Resta
 
 ## 8. 단계별 실행 계획
 
-### 8.1 Phase 0 실행 결과 (2026-10-11)
+### 8.1 Phase 0 실행 결과 (2026-10-11~12)
 
-- **Phase 0 기준선·소스 조사 진행 결과:** [Phase0_Baseline_Report.md](Phase0_Baseline_Report.md) — 원본 SHA, 구성요소, 핵심 14개 모듈의 정적 import 관계, MCP 공개 도구 계약, 플러그인 5종, Linux 네이티브 의존성 및 upstream CI 결과를 기록.
+- **Phase 0 기준선·소스 조사:** [Phase0_Baseline_Report.md](Phase0_Baseline_Report.md) — 원본 SHA, 구성요소, 핵심 모듈 의존성, MCP 공개 도구 계약, 플러그인 5종, Linux 네이티브 의존성 및 upstream CI 기록.
+- **RPi3 Venv 실측:** [Phase0_RPi3_Test_Report.md](Phase0_RPi3_Test_Report.md) — Ubuntu Server 24.04.5 ARM64, HongDevVenv Python 3.12.3에서 정적 소스·계약 검사 **18/18 PASS**, 전체 `src` TypeScript 299개 파일의 lexical 상대 import edge 1,175개, 미해결 0개. 이는 타입 검사나 동적 실행 성공이 아님.
 - **원본 CI:** Ubuntu 24.04 x64를 포함한 upstream Node 22 CI 및 Linux x64 Canary 패키징 모두 성공. 이는 **기존 Electron 빌드의 증빙**이며 아직 Headless 빌드 성공은 아님.
-- **남은 게이트:** 전체 177개 main + 55개 shared TypeScript import의 전수 그래프, fork에서 clean 빌드·테스트 재현, permission별 실제 MCP tool snapshot. 이를 완료하거나 Phase 1 첫 PR의 차단 게이트로 명시하고 통과하기 전에는 Headless 실행 가능 판정 불가.
-- **결과 상태:** Phase 0 정적 기준선 **부분 완료**. 완전한 서버 실행 검증은 미실시. 브라우저/Electron 코어 의존성 분리 작업은 **Phase 1~2의 구현 대상**.
+- **남은 게이트:** 정식 TypeScript AST·런타임 import graph 및 Headless 금지 모듈 CI 검증, fork에서 `npm ci`/`typecheck`/`verify:ci` 재현, permission별 실제 MCP tool snapshot. RPi3에서 npm 설치는 호출 시간 제한·오프라인 `ENOTCACHED`로 실패/중단됐고 Node 24.14.0의 엔진 요구 버전 불일치 경고가 확인되었다. 종속성 설치 미완료로 타입 검사와 Vitest는 **미실시**.
+- **결과 상태:** Phase 0 **Venv 정적 18개 검사 완료**, 전체 의존성 lexical 스캔 완료. **타입 검사·Vitest·독립 Headless 구동 검증은 완료되지 않아 Phase 0 전체 상태는 `부분 완료`**. 브라우저/Electron 코어 의존성 분리 작업은 **Phase 1~2의 구현 대상**.
 
 ### 8.2 Phase 실행 목록
 
 | Phase | 우선순위 | 작업 및 변경 | 검증 / 완료 조건 |
 | --- | --- | --- | --- |
-| **0 — Baseline (진행: 정적 조사 및 upstream CI 확보)** | P0 | 원본 SHA/의존성 조사, 주요 14개 모듈 import 관계, Core/Plugins 계약·플러그인 스냅샷 [보고서](Phase0_Baseline_Report.md) 작성 | 완료: upstream 기준선; 미완: 177+55 전체 의존성, fork 자체 clean test, 도구 스냅샷 fixture |
+| **0 — Baseline (부분 완료: RPi3 Venv 정적 검증)** | P0 | upstream CI·[기준선 보고서](Phase0_Baseline_Report.md), RPi3 [정적 테스트 18/18](Phase0_RPi3_Test_Report.md), `src` 299개 lexical import scan | 완료: 정적 검사·상대경로 검증; 미완: AST/CI 금지 import, npm/typecheck/Vitest, 실제 tools/list fixture |
 | **1 — Headless skeleton** | P0 | Electron-free `main/bootstrap`, CLI `serve/doctor`, XDG 데이터 경로, SIGTERM 및 잠금, node 전용 빌드 | `DISPLAY` 없이 부팅/종료, Electron import 0, 로그 생성 |
 | **2 — Core extraction** | P0 | MCP Server/Kernel/Tools의 브라우저 귀속 분리, Core-only 계약, 권한 승인·운영 context, Linux PTY | file/patch/exec/read-only/root deny 실사용 테스트 |
 | **3 — Plugins incl. Playwright** | P0 | PluginManager Electron opener 분리, CLI 설치/상태 관리, npm/Python/stdio/remote, Headless 카탈로그 5종 선별(Blender·Unity 제외), Playwright preset + headless deps | 5종 카탈로그 확인, Plugins tools/list/call, Playwright navigation·snapshot·스크린샷, 하위 프로세스 회수 |
@@ -375,3 +376,4 @@ systemd unit 작성 시: `User`/`Group`, `WorkingDirectory`, `ExecStart`, `Resta
 | 2026-10-11 | **1.0.0** | upstream 코드 기반 Ubuntu Server Headless 적합성·아키텍처·기능/제외 경계·Playwright 플러그인·Phase 0~7·테스트 기준 확정 초안 |
 | 2026-10-11 | **1.0.1** | Blender/Unity 지원 제외, Headless 기본 플러그인 5종 명시 및 Phase 3·검증 기준 갱신 |
 | 2026-10-11 | **1.1.0** | Phase 0 소스·CI 조사 보고서 연결, 기준 Node.js 22 수정, 해결 전 게이트 및 진행 상태 반영 |
+| 2026-10-12 | **1.2.0** | RPi3 HongDevVenv 기반 정적 테스트 18/18 및 전체 import 경로 스캔 기록, npm 설치 차단·미실시 런타임 테스트 상태 명확화 |
