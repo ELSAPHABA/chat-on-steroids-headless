@@ -5,7 +5,7 @@
 > **기준 Upstream:** `totec448-spec/chat-on-steroids` @ `1d23ecdb8ab4dd5864f7f835778f539c51128526`  
 > **작업 대상:** `ELSAPHABA/chat-on-steroids-headless` / `feat/headless-refactoring`  
 > **원본 버전:** `package.json` 2.1.34  
-> **설계 기준:** [Headless_Refactoring_Specification.md](Headless_Refactoring_Specification.md) v1.0.1  
+> **설계 기준:** [Headless_Refactoring_Specification.md](Headless_Refactoring_Specification.md) v1.1.0  
 > **범위:** Chromium companion/ChatGPT 브라우저 제어 제외, 외부 Playwright MCP 유지, Blender/Unity 기본 지원 제외
 
 ## 1. Phase 0 체크리스트 및 검증 수준
